@@ -1,4 +1,4 @@
-import React, { FC, useEffect, useState } from 'react';
+import React, { FC, useEffect, useRef, useState } from 'react';
 import CloseIcon from '@mui/icons-material/Close';
 import { ProfileData } from '../hooks/useProfileData';
 import { TextField, Avatar, Dialog, Button } from '@mui/material';
@@ -10,6 +10,7 @@ export interface EditProfileProps {
   open: boolean,
   submit?: submitType,
   cancel?: () => void,
+  profileData?: ProfileData
 }
 
 const EditProfile: FC<EditProfileProps> = (props) => {
@@ -20,6 +21,8 @@ const EditProfile: FC<EditProfileProps> = (props) => {
   const [signature, setSignature] = useState('');
   const [address, setAddress] = useState('');
   const [isFull, setFullScreen] = useState(false);
+  const [, forceRender] = useState(false);
+  const isCheckForm = useRef(false);
 
   const isFullScreen = () => {
     const currentWidth = window.document.body.clientWidth;
@@ -47,6 +50,8 @@ const EditProfile: FC<EditProfileProps> = (props) => {
 
     const file = e.target.files[0];
 
+    if (!file) return;
+
     if (file.size > 2 * 1024 * 1024) return;
 
     fileToBase64(file, (url) => {
@@ -54,8 +59,39 @@ const EditProfile: FC<EditProfileProps> = (props) => {
     })
   };
 
-  const handleSubmit = () => {
-    if (username && email && phone) {
+  const checkPhone = (phone: string):boolean => {
+    if (!isCheckForm.current) return true;
+
+    return phone.length === 11 && /^1[3-9]\d{9}$/.test(phone);
+  }
+
+  const checkUsername = (username: string):boolean => {
+    if (!isCheckForm.current) return true;
+    
+    return username.length >= 3 && username.length <= 10;
+  }
+
+  const checkEmail = (email: string):boolean => {
+    if (!isCheckForm.current) return true;
+
+    return /^[\w-]+(\.[\w-]+)*@[\w-]+(\.[\w-]+)+$/.test(email);
+  }
+
+  const getUsernameError = () => {
+    if (!isCheckForm.current) return '';
+
+    if (!checkUsername(username)) {
+      return username.length < 3 ? '用户名长度不能小于3' : username.length > 10 ? '用户名长度不能大于10' : ''
+    }
+    return ''
+  }
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    isCheckForm.current = true;
+
+    if (checkUsername(username) && checkEmail(email) && checkPhone(phone)) {
       props.submit && props.submit({
         name: username,
         avatarUrl: avatar || '',
@@ -64,14 +100,26 @@ const EditProfile: FC<EditProfileProps> = (props) => {
         address: address,
         description: signature
       })
+      return;
     } else {
-      // 提示用户填写必填项
+      forceRender((prev) => !prev);
     }
   };
 
   useEffect(() => {
-    isFullScreen()
+    isFullScreen();
   }, [])
+
+  useEffect(() => {
+    if (props.profileData) {
+      setAvatar(props.profileData.avatarUrl || null)
+      setUsername(props.profileData.name)
+      setEmail(props.profileData.email)
+      setPhone(props.profileData.phone)
+      setSignature(props.profileData.description || '')
+      setAddress(props.profileData.address || '')
+    }
+  }, [props.profileData])
 
   return <Dialog open={props.open} fullScreen={isFull} maxWidth="md" fullWidth={true}>
     <div className='w-full p-4'>
@@ -103,7 +151,8 @@ const EditProfile: FC<EditProfileProps> = (props) => {
           <div className='mt-4'>
             <TextField
               label="用户名"
-              required
+              error={!checkUsername(username)}
+              helperText={getUsernameError()}
               className='w-full'
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -114,8 +163,9 @@ const EditProfile: FC<EditProfileProps> = (props) => {
             <TextField
               className='w-full'
               label="邮箱"
+              error={!checkEmail(email)}
+              helperText={checkEmail(email) ? '' : '邮箱格式不正确'}
               type="email"
-              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -126,7 +176,8 @@ const EditProfile: FC<EditProfileProps> = (props) => {
               label="手机号"
               className='w-full'
               type="tel"
-              required
+              error={!checkPhone(phone)}
+              helperText={checkPhone(phone) ? '' : '手机号格式不正确'}
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
